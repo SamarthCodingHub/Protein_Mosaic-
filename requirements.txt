@@ -6,5 +6,7 @@ biopython
 plotly
 numpy
 MDAnalysis
-ramachandraw
 matplotlib
+ipywidgets
+ipython_genutils
+git+https://github.com/rlabduke/ramachandraw.git
