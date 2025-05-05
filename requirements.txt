@@ -1,11 +1,10 @@
 streamlit
-git+https://github.com/3dmol/py3Dmol.git
+requests
+py3Dmol
 stmol
 biopython
 plotly
 numpy
-requests
 MDAnalysis
 ramachandraw
-joblib
-Py3dmol
+matplotlib
