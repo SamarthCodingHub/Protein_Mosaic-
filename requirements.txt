@@ -1,12 +1,6 @@
 streamlit
-requests
-py3Dmol
-stmol
+streamlit-3dmol
 biopython
-plotly
-numpy
-MDAnalysis
 matplotlib
-ipywidgets
-ipython_genutils
-git+https://github.com/rlabduke/ramachandraw.git
+plotly
+requests
