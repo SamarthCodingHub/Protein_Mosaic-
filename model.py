@@ -1,37 +1,16 @@
 import streamlit as st
+import streamlit_3dmol
 import requests
-import py3Dmol
-import stmol
-from Bio.PDB import PDBParser
+from Bio.PDB import PDBParser, PPBuilder
 from io import StringIO
-import plotly.express as px
-import plotly.graph_objects as go
-import numpy as np
-import MDAnalysis as mda
-from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis
-from ramachandraw.parser import get_phi_psi
-from ramachandraw.utils import fetch_pdb, plot
 import matplotlib.pyplot as plt
-import shutil
-import subprocess
-import os
-import tempfile
-
-# ----------------------
-# App Configuration
-# ----------------------
-st.set_page_config(
-    page_title="Protein Molecule Mosaic",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+import plotly.graph_objects as go
 
 # ----------------------
 # Helper Functions
 # ----------------------
 @st.cache_data
 def fetch_pdb_data(pdb_id):
-    """Fetch PDB data from RCSB with error handling"""
     url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
     try:
         response = requests.get(url)
@@ -45,15 +24,12 @@ def classify_ligand(residue):
     resname = residue.get_resname().strip()
     if len(resname) <= 2:
         return 'ion'
-    elif has_polydentate_properties(residue):
+    elif any(atom.name in ['OXT', 'ND1', 'NE2'] for atom in residue):
         return 'polydentate'
     return 'monodentate'
 
-def has_polydentate_properties(residue):
-    return any(atom.name in ['OXT', 'ND1', 'NE2'] for atom in residue)
-
 def extract_ligands(pdb_data):
-    parser = PDBParser()
+    parser = PDBParser(QUIET=True)
     structure = parser.get_structure("temp", StringIO(pdb_data))
     ligands = {'ion': [], 'monodentate': [], 'polydentate': []}
     for residue in structure.get_residues():
@@ -70,23 +46,8 @@ def extract_ligands(pdb_data):
                 })
     return ligands
 
-def analyze_hydrogen_bonds(pdb_data):
-    with open("temp.pdb", "w") as f:
-        f.write(pdb_data)
-    u = mda.Universe("temp.pdb")
-    hbonds = HydrogenBondAnalysis(
-        universe=u,
-        donors_sel="name N",
-        hydrogens_sel="name H",
-        acceptors_sel="name O",
-        d_a_cutoff=3.5,
-        d_h_a_angle_cutoff=150,
-    )
-    hbonds.run()
-    return hbonds.count_by_time()
-
 def predict_active_sites(pdb_data):
-    parser = PDBParser()
+    parser = PDBParser(QUIET=True)
     structure = parser.get_structure("temp", StringIO(pdb_data))
     catalytic_residues = ['HIS', 'ASP', 'GLU', 'SER', 'CYS', 'LYS', 'TYR', 'ARG']
     active_sites = []
@@ -110,52 +71,34 @@ def visualize_ligand_counts(ligands):
                       yaxis_title='Count')
     return fig
 
-def create_3d_view(pdb_data, style='cartoon', highlight_ligands=True):
-    view = py3Dmol.view(width=800, height=600)
-    view.addModel(pdb_data, 'pdb')
-    if style == 'cartoon':
-        view.setStyle({'cartoon': {'color': 'spectrum'}})
-    elif style == 'surface':
-        view.setStyle({'cartoon': {'color':'white'}})
-        view.addSurface(py3Dmol.SAS, {'opacity':0.7})
-    elif style == 'sphere':
-        view.setStyle({'sphere': {'colorscheme':'Jmol'}})
-    if highlight_ligands:
-        view.addStyle({'hetflag': True}, 
-                     {'stick': {'colorscheme':'greenCarbon', 'radius':0.3}})
-    view.zoomTo()
-    return view
+def get_phi_psi_angles(pdb_string):
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("protein", StringIO(pdb_string))
+    phi_psi = []
+    for model in structure:
+        for chain in model:
+            ppb = PPBuilder()
+            for pp in ppb.build_peptides(chain):
+                angles = pp.get_phi_psi_list()
+                for phi, psi in angles:
+                    if phi is not None and psi is not None:
+                        phi_psi.append((phi * 180.0 / 3.14159, psi * 180.0 / 3.14159))
+    return phi_psi
 
-def generate_ramachandran_plot(pdb_id):
-    pdb_data = fetch_pdb_data(pdb_id)
-    if pdb_data is not None:
-        ax = plot(fetch_pdb(pdb_id))
-        fig = ax.figure
-        return fig
-    return None
-
-def generate_ramachandran_plot_from_data(pdb_string):
-    """Generate Ramachandran plot from PDB string (uploaded file)."""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb", mode="w") as tmp:
-        tmp.write(pdb_string)
-        tmp_path = tmp.name
-
-    phi_psi = get_phi_psi(tmp_path)
-    fig, ax = plt.subplots(figsize=(5,5))
+def plot_ramachandran(phi_psi):
+    fig, ax = plt.subplots(figsize=(5, 5))
     if phi_psi:
-        ax.plot([x[0] for x in phi_psi], [x[1] for x in phi_psi], 'o', markersize=2)
-    ax.set_title("Ramachandran Plot")
+        phi, psi = zip(*phi_psi)
+        ax.scatter(phi, psi, s=10)
     ax.set_xlabel("Phi")
     ax.set_ylabel("Psi")
+    ax.set_title("Ramachandran Plot")
     ax.set_xlim(-180, 180)
     ax.set_ylim(-180, 180)
     ax.grid(True)
     return fig
 
 def ramachandran_region_analysis(phi_psi_list):
-    """
-    Returns the percentage of residues in favored, allowed, and outlier regions.
-    """
     favored = 0
     allowed = 0
     outlier = 0
@@ -174,7 +117,6 @@ def ramachandran_region_analysis(phi_psi_list):
         else:
             outlier += 1
 
-    # Avoid double-counting favored as allowed
     allowed = allowed - favored
     outlier = total - favored - allowed
 
@@ -185,49 +127,22 @@ def ramachandran_region_analysis(phi_psi_list):
         "total": total
     }
 
-# ----------------------
-# Docking UI Function
-# ----------------------
-def docking_ui(pdb_data):
-    st.subheader("Ligand Docking (AutoDock Vina)")
-    if shutil.which("vina") is None:
-        st.error("AutoDock Vina is not installed or not in PATH. Please install and add to PATH.")
-        return
-
-    ligand_file = st.file_uploader("Upload ligand (PDBQT)", type=["pdbqt"])
-    st.markdown("#### Docking Box Parameters")
-    center_x = st.number_input("Center X", value=0.0, format="%.2f")
-    center_y = st.number_input("Center Y", value=0.0, format="%.2f")
-    center_z = st.number_input("Center Z", value=0.0, format="%.2f")
-    size_x = st.number_input("Size X (Å)", value=20.0, min_value=5.0, max_value=60.0, format="%.2f")
-    size_y = st.number_input("Size Y (Å)", value=20.0, min_value=5.0, max_value=60.0, format="%.2f")
-    size_z = st.number_input("Size Z (Å)", value=20.0, min_value=5.0, max_value=60.0, format="%.2f")
-
-    if ligand_file and pdb_data and st.button("Run Docking"):
-        with open("protein.pdb", "w") as f:
-            f.write(pdb_data)
-        os.system("obabel protein.pdb -O protein.pdbqt")
-        with open("ligand.pdbqt", "wb") as f:
-            f.write(ligand_file.read())
-        vina_cmd = [
-            "vina",
-            "--receptor", "protein.pdbqt",
-            "--ligand", "ligand.pdbqt",
-            "--center_x", str(center_x),
-            "--center_y", str(center_y),
-            "--center_z", str(center_z),
-            "--size_x", str(size_x),
-            "--size_y", str(size_y),
-            "--size_z", str(size_z),
-            "--out", "docked.pdbqt"
-        ]
-        st.write("Running docking...")
-        result = subprocess.run(vina_cmd, capture_output=True, text=True)
-        st.text(result.stdout)
-        if os.path.exists("docked.pdbqt"):
-            docked = open("docked.pdbqt").read()
-            stmol.showmol(create_3d_view(docked, style='sphere'), height=400)
-            st.success("Docking complete! Showing docked pose.")
+def show_3d_structure(pdb_data, style='cartoon', highlight_ligands=True):
+    xyzview = streamlit_3dmol.view(width=800, height=500)
+    xyzview.addModel(pdb_data, 'pdb')
+    if style == 'cartoon':
+        xyzview.setStyle({'cartoon': {'color': 'spectrum'}})
+    elif style == 'surface':
+        xyzview.setStyle({'cartoon': {'color': 'white'}})
+        xyzview.addSurface('SAS', {'opacity': 0.7})
+    elif style == 'sphere':
+        xyzview.setStyle({'sphere': {'colorscheme': 'Jmol'}})
+    if highlight_ligands:
+        xyzview.addStyle({'hetflag': True}, {'stick': {'colorscheme': 'greenCarbon', 'radius': 0.3}})
+    xyzview.zoomTo()
+    xyzview.setBackgroundColor('white')
+    xyzview.show()
+    st.write("")
 
 # ----------------------
 # UI Components
@@ -260,6 +175,11 @@ def sidebar_controls():
 # Main App Logic
 # ----------------------
 def main():
+    st.set_page_config(
+        page_title="Protein Molecule Mosaic",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     controls = sidebar_controls()
     col1, col2 = st.columns([3, 1])
 
@@ -281,26 +201,28 @@ def main():
                 st.success(f"PDB ID {pdb_id} loaded from RCSB.")
 
         if pdb_data:
-            view = create_3d_view(
-                pdb_data, 
+            st.subheader("3D Structure Viewer")
+            show_3d_structure(
+                pdb_data,
                 style=controls['render_style'],
                 highlight_ligands=controls['show_ligands']
             )
-            stmol.showmol(view, height=600, width=800)
             with st.expander("Ramachandran Plot"):
-                ramachandran_fig = generate_ramachandran_plot(pdb_id)
-                if pdb_id:
-                    phi_psi = get_phi_psi(fetch_pdb(pdb_id))
-                    # ... your analysis or stats here ...
-                if ramachandran_fig is not None:
-                    st.pyplot(ramachandran_fig)
+                phi_psi = get_phi_psi_angles(pdb_data)
+                if phi_psi:
+                    fig = plot_ramachandran(phi_psi)
+                    st.pyplot(fig)
+                    stats = ramachandran_region_analysis(phi_psi)
+                    st.markdown(f"""
+                    **Ramachandran Plot Analysis**
+                    - **Total residues:** {stats['total']}
+                    - **Favored region:** {stats['favored']:.1f}%
+                    - **Allowed region:** {stats['allowed']:.1f}%
+                    - **Outlier region:** {stats['outlier']:.1f}%
+                    """)
                 else:
-                    st.warning("Unable to generate Ramachandran plot. Please check the PDB ID.")
+                    st.warning("Unable to generate Ramachandran plot. Please check the PDB input.")
 
-            # Docking feature below Ramachandran plot
-            with st.expander("Ligand Docking (AutoDock Vina)"):
-                docking_ui(pdb_data)
-       
     with col2:
         st.header("Protein Dynamics")  
         if pdb_data:
@@ -311,21 +233,6 @@ def main():
                 st.write(f"**Monodentate Ligands:** {len(ligands['monodentate'])}")
                 st.write(f"**Polydentate Ligands:** {len(ligands['polydentate'])}")
             with st.expander("Active Sites"):
-                active_sites = [res for res in PDBParser()
-                    .get_structure("temp", StringIO(pdb_data))
-                    .get_residues() if res.get_resname() in ['HIS', 'ASP', 'GLU']]
-                st.write(f"**Potential Active Sites:** {len(active_sites)}")
-                st.write("Common catalytic residues highlighted")
-            with st.expander("Flexibility Report"):
-                st.plotly_chart(px.histogram(x=range(10), y=range(10), title="Residue Flexibility"))
-                st.caption("Simulated flexibility data - integrate MD analysis here")
-            with st.expander("Hydrogen Bond Analysis"):
-                hbond_counts = analyze_hydrogen_bonds(pdb_data)
-                total_hbonds = np.sum(hbond_counts)
-                st.write(f"Total Hydrogen Bonds: {total_hbonds}")
-                if total_hbonds > 0:
-                    st.write(f"Counts per Frame: {hbond_counts}")
-            with st.expander("Active Site Prediction"):
                 active_sites = predict_active_sites(pdb_data)
                 st.write(f"**Predicted Active Sites ({len(active_sites)} residues):**")
                 for site in active_sites:
@@ -335,44 +242,9 @@ def main():
                 fig = visualize_ligand_counts(ligands)
                 st.plotly_chart(fig)
 
-            with st.expander("Ramachandran Plot"):
-                ramachandran_fig = None
-                phi_psi = None
-
-                if source == "pdbid" and pdb_id:
-                    ramachandran_fig = generate_ramachandran_plot(pdb_id)
-                    try:
-                        phi_psi = get_phi_psi(fetch_pdb(pdb_id))
-                    except Exception as e:
-                        phi_psi = None
-                        st.warning(f"Could not extract phi/psi: {e}")
-                elif source == "upload" and pdb_data:
-                    ramachandran_fig = generate_ramachandran_plot_from_data(pdb_data)
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdb", mode="w") as tmp:
-                        tmp.write(pdb_data)
-                        tmp_path = tmp.name
-                    try:
-                        phi_psi = get_phi_psi(tmp_path)
-                    except Exception as e:
-                        phi_psi = None
-                        st.warning(f"Could not extract phi/psi: {e}")
-
-                if phi_psi and all(isinstance(x, (list, tuple)) and len(x) == 2 for x in phi_psi):
-                    stats = ramachandran_region_analysis(phi_psi)
-                    st.markdown(f"""
-                    **Ramachandran Plot Analysis**
-                    - **Total residues:** {stats['total']}
-                    - **Favored region:** {stats['favored']:.1f}%
-                    - **Allowed region:** {stats['allowed']:.1f}%
-                    - **Outlier region:** {stats['outlier']:.1f}%
-                    """)
-                elif phi_psi:
-                    st.warning("Phi/Psi data is not in the expected format.")
-
-                if ramachandran_fig is not None:
-                    st.pyplot(ramachandran_fig)
-                else:
-                    st.warning("Unable to generate Ramachandran plot. Please check the PDB input.")
-
 if __name__ == "__main__":
     main()
+
+      
+       
+           
