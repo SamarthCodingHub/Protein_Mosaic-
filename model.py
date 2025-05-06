@@ -1,10 +1,10 @@
 import streamlit as st
-import streamlit_3dmol
 import requests
 from Bio.PDB import PDBParser, PPBuilder
 from io import StringIO
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import py3Dmol
 
 # ----------------------
 # Helper Functions
@@ -128,21 +128,22 @@ def ramachandran_region_analysis(phi_psi_list):
     }
 
 def show_3d_structure(pdb_data, style='cartoon', highlight_ligands=True):
-    xyzview = streamlit_3dmol.view(width=800, height=500)
-    xyzview.addModel(pdb_data, 'pdb')
+    # Use py3Dmol and st.components.v1.html
+    view = py3Dmol.view(width=800, height=500)
+    view.addModel(pdb_data, 'pdb')
     if style == 'cartoon':
-        xyzview.setStyle({'cartoon': {'color': 'spectrum'}})
+        view.setStyle({'cartoon': {'color': 'spectrum'}})
     elif style == 'surface':
-        xyzview.setStyle({'cartoon': {'color': 'white'}})
-        xyzview.addSurface('SAS', {'opacity': 0.7})
+        view.setStyle({'cartoon': {'color': 'white'}})
+        view.addSurface(py3Dmol.SAS, {'opacity': 0.7})
     elif style == 'sphere':
-        xyzview.setStyle({'sphere': {'colorscheme': 'Jmol'}})
+        view.setStyle({'sphere': {'colorscheme': 'Jmol'}})
     if highlight_ligands:
-        xyzview.addStyle({'hetflag': True}, {'stick': {'colorscheme': 'greenCarbon', 'radius': 0.3}})
-    xyzview.zoomTo()
-    xyzview.setBackgroundColor('white')
-    xyzview.show()
-    st.write("")
+        view.addStyle({'hetflag': True}, {'stick': {'colorscheme': 'greenCarbon', 'radius': 0.3}})
+    view.zoomTo()
+    view.setBackgroundColor('white')
+    # Render in Streamlit
+    st.components.v1.html(view._make_html(), height=500, width=800)
 
 # ----------------------
 # UI Components
@@ -224,7 +225,7 @@ def main():
                     st.warning("Unable to generate Ramachandran plot. Please check the PDB input.")
 
     with col2:
-        st.header("Protein Dynamics")  
+        st.header("Protein Dynamics")
         if pdb_data:
             with st.expander("Ligand Information"):
                 ligands = extract_ligands(pdb_data)
@@ -244,7 +245,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-      
-       
-           
