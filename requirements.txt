@@ -4,3 +4,7 @@ biopython
 matplotlib
 plotly
 requests
+vina
+meeko
+rdkit-pypi
+openbabel
