@@ -145,6 +145,9 @@ def show_3d_structure(pdb_data, style='cartoon', highlight_ligands=True):
     # Render in Streamlit
     st.components.v1.html(view._make_html(), height=500, width=800)
 
+
+
+
 # ----------------------
 # UI Components
 # ----------------------
@@ -171,6 +174,42 @@ def sidebar_controls():
             'render_style': render_style,
             'show_ligands': show_ligands,
         }
+
+# ----------------------
+# HOME PAGE
+# ----------------------
+def home_page():
+    st.title("HOME PAGE")
+
+    # Section 1: Overview of the App
+    st.header("Overview of the App")
+    st.markdown("""
+    **Protein Molecule Mosaic** is an interactive web application for exploring and analyzing protein structures (PDB files).
+
+    ### Objectives:
+    - Make protein structure visualization accessible and interactive
+    - Allow users to upload or fetch PDB files for analysis
+    - Identify and classify ligands and predict active sites
+    - Generate and analyze Ramachandran plots
+
+    ### Features:
+    - 3D visualization of protein structures (cartoon, surface, sphere)
+    - Upload PDB files or fetch by PDB ID
+    - Ligand classification (ion, monodentate, polydentate)
+    - Active site prediction based on catalytic residues
+    - Ramachandran plot generation with region analysis
+    - User-friendly sidebar controls
+    """)
+
+    # Section 2: About Me
+    st.header("About Me")
+    st.markdown("""
+    **Samarth Satalinga Kittad**
+
+    A passionate developer and computer aided durg disocvery enthusiast.  
+    I created this app to make protein analysis accessible, interactive, and visually engaging for students, researchers, and anyone curious about structural biology!
+    """)
+
 
 # ----------------------
 # Main App Logic
