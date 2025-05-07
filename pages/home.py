@@ -23,11 +23,11 @@ def home_page():
     """)
 
     st.header("About Me")
+    st.image("https://avatars.githubusercontent.com/u/203984900?v=4", width=150)
     st.markdown("""
     **Samarth Satalinga Kittad**
- # Add your photo here
-    st.image("# Add your photo here
-    st.image("https://avatars.githubusercontent.com/u/your-github-id?v=4", width=150)
+    
+  
     A passionate developer and computer aided drug discovery enthusiast.  
     I created this app to make protein analysis accessible, interactive, and visually engaging for students, researchers, and anyone curious about structural biology!
     """)
