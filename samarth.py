@@ -5,17 +5,17 @@ from io import StringIO
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import py3Dmol
-import tempfile
-import os
 
 # Docking dependencies
+import tempfile
+import os
 from vina import Vina
 from meeko import MoleculePreparation
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 # ----------------------
-# Helper Functions (original)
+# Helper Functions
 # ----------------------
 @st.cache_data
 def fetch_pdb_data(pdb_id):
@@ -173,7 +173,6 @@ def ligand_file_to_pdbqt(ligand_file, out_pdbqt):
         f.write(preparator.write_pdbqt_string())
 
 def protein_to_pdbqt(pdb_str, out_pdbqt):
-    # Requires Open Babel installed
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdb') as tmp_pdb:
         tmp_pdb.write(pdb_str.encode())
         tmp_pdb.flush()
@@ -188,13 +187,11 @@ def run_vina_docking(receptor_pdbqt, ligand_pdbqt, center, box_size, exhaustiven
     v.dock(exhaustiveness=exhaustiveness, n_poses=n_poses)
     poses = v.poses()
     scores = v.energies()
-    # Save top pose
     docked_ligand_pdbqt = ligand_pdbqt + "_docked.pdbqt"
     v.write_poses(docked_ligand_pdbqt, n_poses=1, overwrite=True)
     return poses, scores, docked_ligand_pdbqt
 
 def pdbqt_to_pdb(pdbqt_file):
-    # Requires Open Babel installed
     pdb_file = pdbqt_file + ".pdb"
     os.system(f'obabel {pdbqt_file} -O {pdb_file}')
     with open(pdb_file, 'r') as f:
@@ -375,3 +372,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+             
